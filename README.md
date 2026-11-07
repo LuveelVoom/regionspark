@@ -74,33 +74,36 @@ They need Python 3 only.
 
 ## Changing the spark list
 
-The sparks are hard-coded, as in the original script. Each generation, the search takes the leftmost
-live column (rows y−40..y+39), keeps one contiguous run of its cells (the bottom run for `w=0`, the
-top run for `w=1`), and tries each spark in the list for that run's length. A spark is a list of
-**row offsets**: one cell per offset, in the column 2 left of the run, with offset 0 = the run's top
-row (negative = above it). The symmetric copies for `--mode` are added automatically, so list only
-the left-side cells.
+Each generation, the search takes the leftmost live column (rows y−40..y+39), keeps one contiguous
+run of its cells (the bottom run for `w=0`, the top run for `w=1`), and tries each spark in the list
+for that run's length. A spark is a list of **row offsets**: one cell per offset, in the column 2 left
+of the run, with offset 0 = the run's top row (negative = above it). The symmetric copies for `--mode`
+are added automatically, so list only the left-side cells.
 
-The lists are the `sparks = ...` lines in `regionspark.cpp` (search for `vector<vector<int>> sparks`):
+`--sparks` replaces lists: `KEY:LIST` groups separated by `;`, where KEY is the run length `1`, `2`,
+`3`, `4` (4 or more cells) or `*` (all four), and LIST is sparks separated by spaces, each a
+comma-separated list of offsets. Lengths you don't mention keep the original list. The defaults
+(the original script's lists) written this way:
 
-```cpp
-if (L == 1) sparks = {{-2, -1}, {-1, 0}, {0, 1}, {1, 2}};             // run of 1 cell: vertical dominoes
-else if (L == 2) sparks = {{-1}, {0}, {2}, {-2, -1}, {-1, 0}, {1, 2}, {2, 3}};
-else if (L == 3) sparks = {{-1}, {0}, {1}, {2}, {3}, {-2, -1}, {-1, 0}, {2, 3}, {3, 4}};
-else sparks = {{-1}, {0}, {1}, {2}, {3}, {4}, {-2, -1}, {-1, 0}, {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}};
-```
+    --sparks '1:-2,-1 -1,0 0,1 1,2;
+              2:-1 0 2 -2,-1 -1,0 1,2 2,3;
+              3:-1 0 1 2 3 -2,-1 -1,0 2,3 3,4;
+              4:-1 0 1 2 3 4 -2,-1 -1,0 0,1 1,2 2,3 3,4 4,5'
 
-Edit them (for example, add `{0, 2}` for a two-cell spark with a gap, or a 3-cell `{-1, 0, 1}`),
-then `make`. Notes:
+(one line in practice; spaces and line breaks around `;` are fine inside the quotes). Examples:
 
-- The order matters a little: a spark is skipped when its reaction at inner generations 5..8 matches a
+    --sparks '*:0 0,2'               # beside every run: a single cell, or two cells with a gap
+    --sparks '1:-2,-1 -1,0 0,1 1,2 -1,0,1'   # runs of 1: the original dominoes plus a 3-cell line
+
+With `--sparks`, the run file's header gets a `# sparks:` line with the lists used, and each find's
+`spark=(...)` field gives the offsets of the spark that worked. Notes:
+
+- Order matters a little: a spark is skipped when its reaction at inner generations 5..8 matches a
   recent one, so earlier entries take precedence.
-- The `spark=(...)` field of each find prints the offsets used, so finds stay readable.
 - Sparks are always one column wide, 2 columns left of the edge. Another column or a 2-D spark means
-  changing the column `min_x - 2` in the per-mode placement code just below the lists (every mode has
-  its own formula for the symmetric copies), and the C1/`--selfsym` branch.
-- `tests/run_cases.sh` compares with the original script's list, so after a change it reports
-  differences unless `tests/hotdogpi_jul6.py` gets the same edit (its `sparks = [...]` lines).
+  changing `min_x - 2` in the per-mode placement code in `regionspark.cpp` (every mode has its own
+  formula for the symmetric copies) and the C1/`--selfsym` branch.
+- `tests/run_cases.sh` compares against the original script's lists, so don't use `--sparks` there.
 
 ## Options
 
@@ -124,6 +127,7 @@ then `make`. Notes:
 | `--skip-period L` | drop finds whose period is a multiple of one in L (e.g. `24` when the region settles into a p24 by itself); can drop real partials of those periods | — |
 | `--skip-unsparked` | drop finds whose box also returns with no spark | — |
 | `--max-finds N` | at most N reported finds per offset | — |
+| `--sparks SPEC` | replace the spark lists (see Changing the spark list) | the `sparks = [...]` lines |
 | `--trace` | list each (x,y,z) searched and generations simulated | — |
 
 The posted script has its catalyst settings switched on; the author says to switch them off for

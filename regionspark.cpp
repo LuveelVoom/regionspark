@@ -497,6 +497,15 @@ struct Config {
     long max_finds = 0;           // 0 = no limit (per offset)
     vector<int> skip_periods;     // finds of these periods are dropped (e.g. the object's own oscillation)
     bool selfsym = false;         // C1: copy each spark by the pattern's own symmetries
+    // sparks[L]: the sparks tried beside an edge run of L cells (index 4 = 4 or more). Each spark is a list
+    // of row offsets from the run's top row, one cell each, in the column 2 left of the run.
+    vector<vector<int>> sparks[5] = {
+        {},
+        {{-2, -1}, {-1, 0}, {0, 1}, {1, 2}},
+        {{-1}, {0}, {2}, {-2, -1}, {-1, 0}, {1, 2}, {2, 3}},
+        {{-1}, {0}, {1}, {2}, {3}, {-2, -1}, {-1, 0}, {2, 3}, {3, 4}},
+        {{-1}, {0}, {1}, {2}, {3}, {4}, {-2, -1}, {-1, 0}, {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}}};
+    bool sparks_set = false;      // --sparks given (printed in the header)
     int threads = 0;
     bool quiet = false;
     bool trace = false;  // print every (x,y) visited, like g.show
@@ -699,12 +708,7 @@ static void search_xy(const Config &cf, const vector<State> &states, const Task 
                         continue;
                     }
                 }
-                vector<vector<int>> sparks;
-                int L = (int)edge.size();
-                if (L == 1) sparks = {{-2, -1}, {-1, 0}, {0, 1}, {1, 2}};
-                else if (L == 2) sparks = {{-1}, {0}, {2}, {-2, -1}, {-1, 0}, {1, 2}, {2, 3}};
-                else if (L == 3) sparks = {{-1}, {0}, {1}, {2}, {3}, {-2, -1}, {-1, 0}, {2, 3}, {3, 4}};
-                else sparks = {{-1}, {0}, {1}, {2}, {3}, {4}, {-2, -1}, {-1, 0}, {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}};
+                const vector<vector<int>> &sparks = cf.sparks[std::min((int)edge.size(), 4)];  // --sparks
                 for (auto &spark : sparks) {
                     if (U.empty()) break;
                     U.load(current_gen);
@@ -865,6 +869,67 @@ static vector<Cell> parse_pairs(const string &s) {
     return v;
 }
 
+// --sparks 'KEY:LIST;KEY:LIST...': KEY = 1, 2, 3, 4 (4 or more cells in the edge run) or * (all);
+// LIST = sparks separated by spaces, each a comma-separated list of row offsets. Unlisted keys keep the default.
+static void parse_sparks(const string &spec, Config &cf) {
+    size_t i = 0;
+    while (i <= spec.size()) {
+        size_t j = spec.find(';', i);
+        if (j == string::npos) j = spec.size();
+        string g = spec.substr(i, j - i);
+        i = j + 1;
+        size_t b = g.find_first_not_of(" \t\r\n");
+        if (b == string::npos) continue;
+        size_t c = g.find(':');
+        if (c == string::npos) throw std::runtime_error("--sparks: '" + g + "' needs KEY:LIST (KEY 1, 2, 3, 4 or *)");
+        string key = g.substr(b, c - b);
+        while (!key.empty() && isspace((unsigned char)key.back())) key.pop_back();
+        int k0, k1;
+        if (key == "*") k0 = 1, k1 = 4;
+        else if (key == "1" || key == "2" || key == "3" || key == "4") k0 = k1 = key[0] - '0';
+        else throw std::runtime_error("--sparks: key '" + key + "' must be 1, 2, 3, 4 (4 or more) or *");
+        vector<vector<int>> list;
+        string rest = g.substr(c + 1);
+        size_t p = 0;
+        while (true) {
+            p = rest.find_first_not_of(" \t\r\n", p);
+            if (p == string::npos) break;
+            size_t q = rest.find_first_of(" \t\r\n", p);
+            string tok = rest.substr(p, q == string::npos ? string::npos : q - p);
+            p = q;
+            vector<int> spark;
+            size_t t = 0;
+            while (t <= tok.size()) {
+                size_t u = tok.find(',', t);
+                if (u == string::npos) u = tok.size();
+                string num = tok.substr(t, u - t);
+                char *end = nullptr;
+                long v = strtol(num.c_str(), &end, 10);
+                if (num.empty() || *end || v < -1000 || v > 1000)
+                    throw std::runtime_error("--sparks: bad row offset '" + num + "' in '" + tok + "'");
+                spark.push_back((int)v);
+                t = u + 1;
+            }
+            list.push_back(spark);
+            if (q == string::npos) break;
+        }
+        for (int k = k0; k <= k1; k++) cf.sparks[k] = list;
+    }
+    cf.sparks_set = true;
+}
+
+static string sparks_text(const Config &cf) {
+    string out;
+    for (int k = 1; k <= 4; k++) {
+        out += (k > 1 ? ";" : "") + std::to_string(k) + ":";
+        for (size_t s = 0; s < cf.sparks[k].size(); s++) {
+            out += s ? " " : "";
+            for (size_t c = 0; c < cf.sparks[k][s].size(); c++) out += (c ? "," : "") + std::to_string(cf.sparks[k][s][c]);
+        }
+    }
+    return out;
+}
+
 static void usage() {
     fprintf(stderr,
             "usage: regionspark --pattern RLE [options]\n"
@@ -886,6 +951,7 @@ static void usage() {
             "  --max-finds N       at most N reported finds per offset (not in the original)\n"
             "  --selfsym           C1 only: copy each spark by the pattern's own symmetries (not in the original)\n"
             "  --skip-period L     drop finds whose period is a multiple of one in L, e.g. 24 (not in the original)\n"
+            "  --sparks SPEC       spark lists per edge-run length, e.g. '1:-2,-1 0,1;*:0 0,2' (see README; not in the original)\n"
             "  --threads N         OpenMP threads (default: all); use 1 to compare with the original\n"
             "  --trace             list every (x,y,z) actually searched\n");
     exit(1);
@@ -928,6 +994,9 @@ int main(int argc, char **argv) {
         else if (o == "--skip-period") { string v = need(i); for (auto &c : v) if (c == ',') c = ' ';
             char *e = &v[0]; while (*e) { long q = strtol(e, &e, 10); if (q > 0) cf.skip_periods.push_back((int)q); while (*e == ' ') e++; } }
         else if (o == "--max-finds") cf.max_finds = atol(need(i).c_str());
+        else if (o == "--sparks") {
+            try { parse_sparks(need(i), cf); } catch (std::exception &e) { fprintf(stderr, "error: %s\n", e.what()); return 1; }
+        }
         else if (o == "--threads") cf.threads = atoi(need(i).c_str());
         else if (o == "--trace") cf.trace = true;
         else if (o == "--dump-rule") {  // testing: print the 512-entry table (Golly layout) and exit
@@ -1077,6 +1146,7 @@ int main(int argc, char **argv) {
 
     printf("# regionspark: rule %s, mode %s%s, x %d..%d, y %d..%d, %zu offsets, gens %d/%d\n", cf.rule.c_str(),
            mode_name(mode), cf.rotate ? " rotate" : "", sx, ex, sy, ey, tasks.size(), cf.gens, cf.gens2);
+    if (cf.sparks_set) printf("# sparks: %s\n", sparks_text(cf).c_str());
     printf("%s", to_rle(cf.input, cf.rule, "input pattern").c_str());
     fflush(stdout);
 
