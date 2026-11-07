@@ -196,6 +196,6 @@ lifeview.js. drift (github.com/LuveelVoom/drift) findings. lifeweb/vls (github.c
 - Builds without warnings (`-Wall`); `make` picks Homebrew g++ on macOS.
 - Rule tables: `--dump-rule` equals casim (an independent Golly-compatible simulator) on 2000 rules:
   random INT rules in several spellings, plus random isotropic and non-isotropic MAP rules.
-- Oracle comparison `tests/run_cases.sh`, single-threaded: c4, c4a0, d4, x4 and stop IDENTICAL; d8, d8a0,
-  rot, cat and catneg were still running at the first push (the original session had all ten identical).
+- Oracle comparison `tests/run_cases.sh`, single-threaded: all ten cases IDENTICAL (about an hour; the
+  Python oracle is the slow part).
 - D8 q4i known find (offset 11,5, p72) reproduced; `tests/check_bundle.py` passes on it.
