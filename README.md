@@ -72,6 +72,36 @@ Other tools: `rank_viability.py` (ranks clean finds by viable periods and librar
 `extract_oscillators.py`, `debris_pieces.py`, `check_unsparked.py`, `fix_rle_ws.py`.
 They need Python 3 only.
 
+## Changing the spark list
+
+The sparks are hard-coded, as in the original script. Each generation, the search takes the leftmost
+live column (rows y−40..y+39), keeps one contiguous run of its cells (the bottom run for `w=0`, the
+top run for `w=1`), and tries each spark in the list for that run's length. A spark is a list of
+**row offsets**: one cell per offset, in the column 2 left of the run, with offset 0 = the run's top
+row (negative = above it). The symmetric copies for `--mode` are added automatically, so list only
+the left-side cells.
+
+The lists are the `sparks = ...` lines in `regionspark.cpp` (search for `vector<vector<int>> sparks`):
+
+```cpp
+if (L == 1) sparks = {{-2, -1}, {-1, 0}, {0, 1}, {1, 2}};             // run of 1 cell: vertical dominoes
+else if (L == 2) sparks = {{-1}, {0}, {2}, {-2, -1}, {-1, 0}, {1, 2}, {2, 3}};
+else if (L == 3) sparks = {{-1}, {0}, {1}, {2}, {3}, {-2, -1}, {-1, 0}, {2, 3}, {3, 4}};
+else sparks = {{-1}, {0}, {1}, {2}, {3}, {4}, {-2, -1}, {-1, 0}, {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}};
+```
+
+Edit them (for example, add `{0, 2}` for a two-cell spark with a gap, or a 3-cell `{-1, 0, 1}`),
+then `make`. Notes:
+
+- The order matters a little: a spark is skipped when its reaction at inner generations 5..8 matches a
+  recent one, so earlier entries take precedence.
+- The `spark=(...)` field of each find prints the offsets used, so finds stay readable.
+- Sparks are always one column wide, 2 columns left of the edge. Another column or a 2-D spark means
+  changing the column `min_x - 2` in the per-mode placement code just below the lists (every mode has
+  its own formula for the symmetric copies), and the C1/`--selfsym` branch.
+- `tests/run_cases.sh` compares with the original script's list, so after a change it reports
+  differences unless `tests/hotdogpi_jul6.py` gets the same edit (its `sparks = [...]` lines).
+
 ## Options
 
 | option | meaning | original script |
