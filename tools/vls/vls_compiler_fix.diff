@@ -1,0 +1,13 @@
+diff --git a/src/vls/compiler.ts b/src/vls/compiler.ts
+index e77c89a..c80d71a 100644
+--- a/src/vls/compiler.ts
++++ b/src/vls/compiler.ts
+@@ -1145,7 +1145,7 @@ class VLSFileParser extends BaseParser {
+ 
+     generationOrRange(): number[] {
+         let value = this.generation();
+-        if (this.match('to')) {
++        if (this.match('to') || this.match('-')) {  // local fix: boundStateSpecifier matches '-' ranges
+             this.advance();
+             let end = this.generation();
+             let out: number[] = [];

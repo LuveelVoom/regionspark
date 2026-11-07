@@ -1,0 +1,5 @@
+regionspark
+__pycache__/
+.DS_Store
+# hotdogPi's original script (the oracle); posted on the forum without a license, so not redistributed here
+tests/hotdogpi_jul6.py
